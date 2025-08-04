@@ -51,16 +51,22 @@ export default function ChargingStationsMap() {
     );
   };
 
-  // ✅ Open a new window with full station info
-  const handleRightClick = async (stationId) => {
-    const params = new URLSearchParams({ key: API_KEY });
-    const res = await fetch(`${API_URL}${stationId}?${params.toString()}`);
-    const data = await res.json();
+const handleRightClick = async (stationId) => {
+  const params = new URLSearchParams({
+    key: API_KEY,
+    output: "json",
+    chargepointid: stationId, // ✅ request by specific ID
+  });
 
-    const prettyData = JSON.stringify(data, null, 2);
-    const newWin = window.open("", "_blank", "width=800,height=600,scrollbars=yes");
-    newWin.document.write(`<pre>${prettyData}</pre>`);
-  };
+  const res = await fetch(`${API_URL}?${params.toString()}`);
+  const data = await res.json();
+
+  const stationDetails = Array.isArray(data) ? data[0] : data;
+  const prettyData = JSON.stringify(stationDetails, null, 2);
+
+  const newWin = window.open("", "_blank", "width=800,height=600,scrollbars=yes");
+  newWin.document.write(`<pre>${prettyData}</pre>`);
+};
 
   const provinces = ["AB", "BC", "SK"];
   const filteredStations = stations.filter(
