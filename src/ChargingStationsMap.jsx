@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { filterByDate } from "./dateFilter";
@@ -14,6 +14,20 @@ L.Icon.Default.mergeOptions({
 
 const API_URL = "https://api.openchargemap.io/v3/poi/";
 const API_KEY = import.meta.env.VITE_OPENCHARGEMAP_KEY;
+
+function MapEvents({ onMoveEnd }) {
+  const map = useMap();
+
+  useEffect(() => {
+    console.log(
+      "✅ Map created (React-Leaflet v5) – attaching moveend listener",
+    );
+    map.on("moveend", onMoveEnd);
+    return () => map.off("moveend", onMoveEnd);
+  }, [map, onMoveEnd]);
+
+  return null;
+}
 
 // ---------- Duplicate Detection ----------
 const haversine = (lat1, lon1, lat2, lon2) => {
@@ -91,6 +105,11 @@ export default function ChargingStationsMap() {
       distanceunit: "KM",
       maxresults: 2000,
     });
+    console.log(
+      "📡 fetchStations called with bounds",
+      bounds ? bounds.toBBoxString() : "initial",
+    );
+    console.log("Full URL:", `${API_URL}?${params.toString()}`);
 
     if (bounds) {
       const sw = bounds.getSouthWest();
@@ -193,28 +212,24 @@ export default function ChargingStationsMap() {
 
       {/* Map */}
       <MapContainer
-        ref={mapRef}
         center={[53.9333, -116.5765]}
         zoom={5}
         style={{ width: "100%", height: "90%" }}
-        whenCreated={(map) => {
-          if (!mapRef.current) {
-            console.log("✅ Map created, attaching moveend listener");
-            mapRef.current = map;
-            map.on("moveend", () => {
-              if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
-              fetchTimeout.current = setTimeout(() => {
-                const bounds = map.getBounds();
-                console.log(
-                  "📡 Map moved – fetching with bounds:",
-                  bounds.toBBoxString(),
-                );
-                fetchStations(bounds);
-              }, 500);
-            });
-          }
-        }}
       >
+        <MapEvents
+          onMoveEnd={() => {
+            const bounds = mapRef.current.getBounds();
+            console.log("📌 moveend fired", bounds.toBBoxString());
+            if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
+            fetchTimeout.current = setTimeout(() => {
+              console.log(
+                "📡 Map moved – fetching with bounds:",
+                bounds.toBBoxString(),
+              );
+              fetchStations(bounds);
+            }, 500);
+          }}
+        />
         <TileLayer
           attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -227,7 +242,7 @@ export default function ChargingStationsMap() {
               station.AddressInfo.Longitude,
             ]}
             eventHandlers={{
-              contextmenu: () => handleRightClick(station), // right-click opens JSON
+              contextmenu: () => handleRightClick(station),
             }}
           >
             <Popup>
