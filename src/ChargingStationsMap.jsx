@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-// Fix default marker icons for Leaflet
+// Fix Leaflet marker icons for Vite
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -13,7 +13,8 @@ L.Icon.Default.mergeOptions({
 
 const API_URL = "https://api.openchargemap.io/v3/poi/";
 const API_KEY = import.meta.env.VITE_OPENCHARGEMAP_KEY;
-const DUPLICATE_DISTANCE_METERS = 100; // threshold for duplicates
+const DUPLICATE_DISTANCE_METERS = 100;
+const STRICT_DISTANCE_METERS = 10;
 
 export default function ChargingStationsMap() {
   const [stations, setStations] = useState([]);
@@ -31,9 +32,9 @@ export default function ChargingStationsMap() {
       countrycode: "CA",
       latitude: 53.9333,
       longitude: -116.5765,
-      distance: 1000,
+      distance: 2000,
       distanceunit: "KM",
-      maxresults: 2000,
+      maxresults: 4000,
     });
     const res = await fetch(`${API_URL}?${params.toString()}`);
     const data = await res.json();
@@ -41,14 +42,14 @@ export default function ChargingStationsMap() {
     setStations(data);
   };
 
-  // --- Normalize title for duplicate comparison ---
+  // Normalize title for duplicate comparison
   const normalizeTitle = (title) =>
     title.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
 
-  // --- Distance calculation (Haversine) ---
+  // Haversine formula for distance in meters
   const haversine = (lat1, lon1, lat2, lon2) => {
     const toRad = (x) => (x * Math.PI) / 180;
-    const R = 6371000; // meters
+    const R = 6371000;
     const dLat = toRad(lat2 - lat1);
     const dLon = toRad(lon2 - lon1);
     const a =
@@ -57,7 +58,7 @@ export default function ChargingStationsMap() {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
-  // --- Group stations into duplicate groups ---
+  // Group duplicates: within 10m → always duplicates; within 100m → only if titles match
   const groupDuplicates = (stations) => {
     const groups = [];
     const visited = new Set();
@@ -77,11 +78,11 @@ export default function ChargingStationsMap() {
           stations[j].AddressInfo.Longitude
         );
 
-        if (
-          d <= DUPLICATE_DISTANCE_METERS &&
+        const titlesMatch =
           normalizeTitle(stations[i].AddressInfo.Title) ===
-            normalizeTitle(stations[j].AddressInfo.Title)
-        ) {
+          normalizeTitle(stations[j].AddressInfo.Title);
+
+        if (d <= STRICT_DISTANCE_METERS || (d <= DUPLICATE_DISTANCE_METERS && titlesMatch)) {
           group.push(stations[j]);
           visited.add(stations[j].ID);
         }
@@ -92,31 +93,27 @@ export default function ChargingStationsMap() {
     return groups;
   };
 
-  // --- Duplicate handling based on dropdown ---
+  // Duplicate handling based on dropdown
   const selectDuplicateRepresentative = (group) => {
     if (duplicateMode === "include") return group;
     if (duplicateMode === "earliest") {
       return [
         group.reduce((earliest, s) =>
-          new Date(s.DateCreated) < new Date(earliest.DateCreated)
-            ? s
-            : earliest
+          new Date(s.DateCreated) < new Date(earliest.DateCreated) ? s : earliest
         ),
       ];
     }
     if (duplicateMode === "latest") {
       return [
         group.reduce((latest, s) =>
-          new Date(s.DateCreated) > new Date(latest.DateCreated)
-            ? s
-            : latest
+          new Date(s.DateCreated) > new Date(latest.DateCreated) ? s : latest
         ),
       ];
     }
     return group;
   };
 
-  // --- Date filtering ---
+  // Date filter
   const dateFilter = (station) => {
     if (!startDate && !endDate) return true;
     const d = new Date(station.DateCreated || station.DateLastStatusUpdate);
@@ -126,12 +123,18 @@ export default function ChargingStationsMap() {
     );
   };
 
-  // --- Apply grouping & filtering ---
+  // Apply grouping & filtering
   const groups = groupDuplicates(stations);
   const filteredGroups = groups
     .map((g) => selectDuplicateRepresentative(g))
     .map((g) => g.filter(dateFilter))
     .filter((g) => g.length > 0);
+
+  // Open API JSON in popup window
+  const openStationJSON = (id) => {
+    const url = `${API_URL}?key=${API_KEY}&chargepointid=${id}`;
+    window.open(url, "_blank", "width=800,height=600,scrollbars=yes,resizable=yes");
+  };
 
   return (
     <div style={{ width: "100%", height: "100%" }}>
@@ -167,7 +170,6 @@ export default function ChargingStationsMap() {
                 {main.AddressInfo.AddressLine1}, {main.AddressInfo.Town}, {main.AddressInfo.StateOrProvince}
                 <br />
                 <strong>DateCreated:</strong> {main.DateCreated}
-                <br />
                 {group.length > 1 && (
                   <div style={{ marginTop: "5px" }}>
                     <em>{group.length} entries found:</em>
@@ -175,15 +177,15 @@ export default function ChargingStationsMap() {
                       {group.map((s) => (
                         <li key={s.ID}>
                           ID#{s.ID} – Created: {s.DateCreated}{" "}
-                          <a
-                            href={`https://api.openchargemap.io/v3/poi/?key=${API_KEY}&chargepointid=${s.ID}`}
-                            target="_blank"
-                          >
-                            View JSON
-                          </a>
+                          <button onClick={() => openStationJSON(s.ID)}>View JSON</button>
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+                {group.length === 1 && (
+                  <div style={{ marginTop: "5px" }}>
+                    <button onClick={() => openStationJSON(main.ID)}>View JSON</button>
                   </div>
                 )}
               </Popup>
