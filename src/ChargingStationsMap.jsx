@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import { filterByDate } from "./dateFilter";
 
 // Fix default marker icons for Leaflet in Vite
 delete L.Icon.Default.prototype._getIconUrl;
@@ -51,7 +52,7 @@ export default function ChargingStationsMap() {
 
   const provinces = ["AB", "BC", "SK"];
   const filteredStations = stations.filter(
-    (s) => provinces.includes(s.AddressInfo?.StateOrProvince) && filterByDate(s)
+    (s) => provinces.includes(s.AddressInfo?.StateOrProvince) && filterByDate(s, startDate, endDate)
   );
 
   return (
