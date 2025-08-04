@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMapEvent } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
@@ -18,7 +18,6 @@ export default function ChargingStationsMap() {
   const [stations, setStations] = useState([]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [dateField, setDateField] = useState("DateCreated"); // ✅ default filter field
 
   useEffect(() => {
     fetchStations();
@@ -36,43 +35,43 @@ export default function ChargingStationsMap() {
     });
     const res = await fetch(`${API_URL}?${params.toString()}`);
     const data = await res.json();
-
-    console.log("Fetched stations:", data.length);
-    data.forEach((s) =>
-      console.log(
-        `ID:${s.ID} | ${s.AddressInfo?.Title} | Created:${s.DateCreated} | Updated:${s.DateLastStatusUpdate}`
-      )
-    );
-
+    console.log("Fetched stations:", data);
     setStations(data);
   };
 
-  /** ✅ Filter helper */
-  const filterByDateField = (station) => {
+  // ✅ Updated: always use DateCreated if available
+  const passesDateFilter = (station) => {
     if (!startDate && !endDate) return true;
-    const fieldValue = station[dateField];
-    if (!fieldValue) return false;
-    const d = new Date(fieldValue);
-    const result =
+    const dateField = station.DateCreated || station.DateLastStatusUpdate;
+    if (!dateField) return false;
+    const d = new Date(dateField);
+    return (
       (!startDate || d >= new Date(startDate)) &&
-      (!endDate || d <= new Date(endDate));
-
-    console.log(
-      `Filter check (${dateField}) for ${station.AddressInfo?.Title} -> ${fieldValue} -> ${result}`
+      (!endDate || d <= new Date(endDate))
     );
+  };
 
-    return result;
+  // ✅ Open a new window with full station info
+  const handleRightClick = async (stationId) => {
+    const params = new URLSearchParams({ key: API_KEY });
+    const res = await fetch(`${API_URL}${stationId}?${params.toString()}`);
+    const data = await res.json();
+
+    const prettyData = JSON.stringify(data, null, 2);
+    const newWin = window.open("", "_blank", "width=800,height=600,scrollbars=yes");
+    newWin.document.write(`<pre>${prettyData}</pre>`);
   };
 
   const provinces = ["AB", "BC", "SK"];
   const filteredStations = stations.filter(
     (s) =>
-      provinces.includes(s.AddressInfo?.StateOrProvince) && filterByDateField(s)
+      provinces.includes(s.AddressInfo?.StateOrProvince) &&
+      passesDateFilter(s)
   );
 
   return (
     <div style={{ width: "100%", height: "100%" }}>
-      {/* ✅ Controls */}
+      {/* Date Filters */}
       <div style={{ padding: "10px", background: "#f8f8f8" }}>
         <label>Start Date:</label>
         <input
@@ -86,18 +85,9 @@ export default function ChargingStationsMap() {
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
         />
-        <label style={{ marginLeft: "10px" }}>Date Field:</label>
-        <select
-          value={dateField}
-          onChange={(e) => setDateField(e.target.value)}
-        >
-          <option value="DateCreated">DateCreated</option>
-          <option value="DateLastStatusUpdate">DateLastStatusUpdate</option>
-          <option value="DateLastVerified">DateLastVerified</option>
-        </select>
       </div>
 
-      {/* ✅ Map */}
+      {/* Map */}
       <MapContainer
         center={[53.9333, -116.5765]}
         zoom={5}
@@ -114,17 +104,23 @@ export default function ChargingStationsMap() {
               station.AddressInfo.Latitude,
               station.AddressInfo.Longitude,
             ]}
+            eventHandlers={{
+              contextmenu: () => handleRightClick(station.ID),
+            }}
           >
             <Popup>
               <strong>{station.AddressInfo.Title}</strong>
               <br />
               {station.AddressInfo.AddressLine1}
               <br />
-              {station.AddressInfo.Town}, {station.AddressInfo.StateOrProvince}
+              {station.AddressInfo.Town},{" "}
+              {station.AddressInfo.StateOrProvince}
               <br />
               Created: {station.DateCreated}
               <br />
               Updated: {station.DateLastStatusUpdate}
+              <br />
+              <em>Right-click marker for full details</em>
             </Popup>
           </Marker>
         ))}
