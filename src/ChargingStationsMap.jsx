@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { filterByDate } from "./dateFilter";
 
 // Fix default marker icons for Leaflet in Vite
 delete L.Icon.Default.prototype._getIconUrl;
@@ -19,6 +18,7 @@ export default function ChargingStationsMap() {
   const [stations, setStations] = useState([]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [dateField, setDateField] = useState("DateCreated"); // ✅ default filter field
 
   useEffect(() => {
     fetchStations();
@@ -36,28 +36,43 @@ export default function ChargingStationsMap() {
     });
     const res = await fetch(`${API_URL}?${params.toString()}`);
     const data = await res.json();
+
+    console.log("Fetched stations:", data.length);
+    data.forEach((s) =>
+      console.log(
+        `ID:${s.ID} | ${s.AddressInfo?.Title} | Created:${s.DateCreated} | Updated:${s.DateLastStatusUpdate}`
+      )
+    );
+
     setStations(data);
   };
 
-  const filterByDate = (station) => {
+  /** ✅ Filter helper */
+  const filterByDateField = (station) => {
     if (!startDate && !endDate) return true;
-    const dateField = station.DateLastStatusUpdate || station.DateCreated;
-    if (!dateField) return false;
-    const d = new Date(dateField);
-    return (
+    const fieldValue = station[dateField];
+    if (!fieldValue) return false;
+    const d = new Date(fieldValue);
+    const result =
       (!startDate || d >= new Date(startDate)) &&
-      (!endDate || d <= new Date(endDate))
+      (!endDate || d <= new Date(endDate));
+
+    console.log(
+      `Filter check (${dateField}) for ${station.AddressInfo?.Title} -> ${fieldValue} -> ${result}`
     );
+
+    return result;
   };
 
   const provinces = ["AB", "BC", "SK"];
   const filteredStations = stations.filter(
-    (s) => provinces.includes(s.AddressInfo?.StateOrProvince) && filterByDate(s, startDate, endDate)
+    (s) =>
+      provinces.includes(s.AddressInfo?.StateOrProvince) && filterByDateField(s)
   );
 
   return (
     <div style={{ width: "100%", height: "100%" }}>
-      {/* Date Filters */}
+      {/* ✅ Controls */}
       <div style={{ padding: "10px", background: "#f8f8f8" }}>
         <label>Start Date:</label>
         <input
@@ -71,9 +86,18 @@ export default function ChargingStationsMap() {
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
         />
+        <label style={{ marginLeft: "10px" }}>Date Field:</label>
+        <select
+          value={dateField}
+          onChange={(e) => setDateField(e.target.value)}
+        >
+          <option value="DateCreated">DateCreated</option>
+          <option value="DateLastStatusUpdate">DateLastStatusUpdate</option>
+          <option value="DateLastVerified">DateLastVerified</option>
+        </select>
       </div>
 
-      {/* Map */}
+      {/* ✅ Map */}
       <MapContainer
         center={[53.9333, -116.5765]}
         zoom={5}
@@ -96,8 +120,9 @@ export default function ChargingStationsMap() {
               <br />
               {station.AddressInfo.AddressLine1}
               <br />
-              {station.AddressInfo.Town},{" "}
-              {station.AddressInfo.StateOrProvince}
+              {station.AddressInfo.Town}, {station.AddressInfo.StateOrProvince}
+              <br />
+              Created: {station.DateCreated}
               <br />
               Updated: {station.DateLastStatusUpdate}
             </Popup>
