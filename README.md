@@ -2,82 +2,127 @@
 
 This project is a **React + Vite** application that displays electric vehicle charging stations in **Alberta, British Columbia, and Saskatchewan** using the [OpenChargeMap API](https://openchargemap.org/site/develop/api).  
 
-It features an **interactive Leaflet map** with markers and supports **filtering stations by date**.
+It also includes **bash scripts** and **Python utilities** for analyzing new fast chargers and generating static maps.
 
 ---
 
 ## 🚀 Features
 - ✅ Interactive map using **React Leaflet**
-- ✅ Fetches live data from **OpenChargeMap API**
+- ✅ Duplicate detection and handling (earliest/latest selection)
 - ✅ Filters stations by **start/end date**
-- ✅ Focuses on **Alberta (AB)**, **British Columbia (BC)**, and **Saskatchewan (SK)**
+- ✅ Dynamic bounding box re-query when panning/zooming
+- ✅ Right-click to open detailed JSON for any station
+- ✅ Bash script to report new fast chargers within a configurable distance
+- ✅ Python script to generate a static map image of new chargers with an OpenStreetMap basemap
 
 ---
 
-## 📦 Requirements
-- [Node.js](https://nodejs.org/) (v18 or later recommended)
-- [npm](https://www.npmjs.com/)
+## 🍎 macOS Installation Guide
 
----
+The project requires a **frontend environment** (Node.js, npm), **command-line utilities** (`jq`, `gawk`), and **Python packages** for generating static maps.
 
-## 🛠️ Installation
+### 1. Install Homebrew (if not installed)
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/yourusername/charging-map.git
-   cd charging-map
-   ```
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+### 2. Install CLI Dependencies
 
-3. **Add your OpenChargeMap API key:**
-   - Open `src/ChargingStationsMap.jsx`
-   - Replace `YOUR_API_KEY_HERE` with your key  
-   *(or use an `.env` file, see below)*
+```bash
+brew install jq gawk node python
+```
 
-4. **Start the development server:**
-   ```bash
-   npm run dev
-   ```
+- `jq` – lightweight JSON processor
+- `gawk` – for Haversine distance calculations
+- `node` – required for running the React app
+- `python` – used for static map generation
 
-5. **Open the app** in your browser at:
-   ```
-   http://localhost:5173
-   ```
+### 3. Set Up Node.js and React App
 
----
+```bash
+git clone git@github.com:jeabraham/charging-map.git
+cd charging-map
+npm install
+```
 
-## 🔑 Optional: Use an `.env` file for your API key
+### 4. Set Up Environment Variables
 
-Instead of hardcoding your API key, create a `.env` file in the project root:
+Create a `.env` file in the project root:
 
 ```env
 VITE_OPENCHARGEMAP_KEY=your_api_key_here
+HOME_LAT=51.062561
+HOME_LON=-114.078868
+MIN_DISTANCE=150
+MAX_DISTANCE=600
+DAYS_AGO=7
 ```
 
-Then, in `ChargingStationsMap.jsx` use:
+### 5. Install Python Virtual Environment & Packages (for map generation)
 
-```javascript
-const API_KEY = import.meta.env.VITE_OPENCHARGEMAP_KEY;
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
+
+`requirements.txt` should include:
+
+```
+pandas
+geopandas
+matplotlib
+contextily
+shapely
+```
+
+### 6. Verify Installation
+
+```bash
+node -v       # should print Node.js version
+jq --version  # should print jq version
+gawk --version # should print GNU Awk version
+python3 --version # should print Python 3 version
+```
+
+---
+
+## 🛠️ Usage
+
+### Run the Interactive Map
+```bash
+npm run dev
+```
+Open in your browser at: [http://localhost:5173](http://localhost:5173)
+
+### Generate Weekly Report of New Fast Chargers
+```bash
+./new_fast_chargers.sh
+```
+Outputs a filtered JSON list to `new_chargers.json`.
+
+### Generate Static Map from New Chargers JSON
+```bash
+source venv/bin/activate
+python plot_new_chargers.py
+```
+Creates `new_chargers_map.png` with OpenStreetMap basemap and charger markers.
 
 ---
 
 ## 📚 Dependencies
-- [React](https://reactjs.org/)
-- [Vite](https://vitejs.dev/)
-- [React Leaflet](https://react-leaflet.js.org/)
-- [Leaflet](https://leafletjs.com/)
+- **Frontend:** React, Vite, React Leaflet, Leaflet
+- **CLI:** jq, gawk
+- **Python:** pandas, geopandas, matplotlib, contextily, shapely
 
 ---
 
 ## ✅ Future Improvements
 - 🔒 Secure API key via backend proxy
-- 🗺️ Add clustering for better map performance
+- 🗺️ Marker clustering for improved performance
 - 📅 Multiple date field filtering (created, updated, last checked)
+- 🖼️ Advanced map styling with legends and interactive HTML export
 
 ---
 

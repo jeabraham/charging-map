@@ -1,0 +1,6 @@
+pandas
+matplotlib
+contextily
+folium
+geopandas
+

@@ -26,3 +26,7 @@ dist-ssr
 tests/*.json.env
 
 .env
+venv
+.venv
+new_chargers.json
+new_chargers_map.png

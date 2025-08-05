@@ -74,7 +74,7 @@ echo "$MERGED_JSON" | jq '
 CUTOFF=$(date -u -v-"${DAYS_AGO}"d +"%Y-%m-%dT%H:%M:%SZ")
 echo "🔍 Filtering for fast chargers added since $CUTOFF..."
 
-echo "$MERGED_JSON" | jq --arg cutoff "$CUTOFF" \
+FILTERED_JSON=$(echo "$MERGED_JSON" | jq --arg cutoff "$CUTOFF" \
   --argjson min "$MIN_DISTANCE" \
   --argjson max "$MAX_DISTANCE" '
   map(
@@ -86,6 +86,8 @@ echo "$MERGED_JSON" | jq --arg cutoff "$CUTOFF" \
       Title: .AddressInfo.Title,
       Town: .AddressInfo.Town,
       Province: .AddressInfo.StateOrProvince,
+      Latitude: .AddressInfo.Latitude,
+      Longitude: .AddressInfo.Longitude,
       Distance_km: (.CalcDistance | round),
       MaxPower_kW: ([.Connections[]?.PowerKW] | max),
       ProviderURL: .AddressInfo.RelatedURL,
@@ -93,4 +95,9 @@ echo "$MERGED_JSON" | jq --arg cutoff "$CUTOFF" \
       DateCreated
     }
   )
-'
+')
+
+# ✅ Save and print
+echo "$FILTERED_JSON" > new_chargers.json
+echo "✅ Saved $(echo "$FILTERED_JSON" | jq 'length') new chargers to new_chargers.json"
+echo "$FILTERED_JSON" | jq 'map(del(.Latitude, .Longitude))'
