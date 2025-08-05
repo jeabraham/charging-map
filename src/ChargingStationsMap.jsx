@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { filterByDate } from "./dateFilter";
 
+// Fix Leaflet icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
@@ -15,6 +16,7 @@ L.Icon.Default.mergeOptions({
 const API_URL = "https://api.openchargemap.io/v3/poi/";
 const API_KEY = import.meta.env.VITE_OPENCHARGEMAP_KEY;
 
+// ---------- MapEvents Component ----------
 function MapEvents({ onMoveEnd }) {
   const map = useMap();
 
@@ -22,8 +24,9 @@ function MapEvents({ onMoveEnd }) {
     console.log(
       "✅ Map created (React-Leaflet v5) – attaching moveend listener",
     );
-    map.on("moveend", onMoveEnd);
-    return () => map.off("moveend", onMoveEnd);
+    const handler = () => onMoveEnd(map);
+    map.on("moveend", handler);
+    return () => map.off("moveend", handler);
   }, [map, onMoveEnd]);
 
   return null;
@@ -31,7 +34,7 @@ function MapEvents({ onMoveEnd }) {
 
 // ---------- Duplicate Detection ----------
 const haversine = (lat1, lon1, lat2, lon2) => {
-  const R = 6371000; // Earth radius in meters
+  const R = 6371000;
   const toRad = (deg) => (deg * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
@@ -81,16 +84,15 @@ const pickDuplicate = (group, mode) => {
       (a, b) => new Date(b.DateCreated) - new Date(a.DateCreated),
     )[0];
   }
-  return group[0]; // default first
+  return group[0];
 };
 
-// ---------- Component ----------
+// ---------- Main Component ----------
 export default function ChargingStationsMap() {
   const [stations, setStations] = useState([]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [duplicateMode, setDuplicateMode] = useState("include");
-  const mapRef = useRef(null);
   const fetchTimeout = useRef(null);
 
   // Initial fetch
@@ -98,37 +100,31 @@ export default function ChargingStationsMap() {
     fetchStations();
   }, []);
 
-  const fetchStations = async (bounds) => {
+  const fetchStations = async (opts) => {
     const params = new URLSearchParams({
       key: API_KEY,
       countrycode: "CA",
       distanceunit: "KM",
       maxresults: 2000,
     });
-    console.log(
-      "📡 fetchStations called with bounds",
-      bounds ? bounds.toBBoxString() : "initial",
-    );
-    console.log("Full URL:", `${API_URL}?${params.toString()}`);
 
-    if (bounds) {
-      const sw = bounds.getSouthWest();
-      const ne = bounds.getNorthEast();
-      params.append("boundingbox", `${sw.lat},${sw.lng},${ne.lat},${ne.lng}`);
+    if (opts?.center) {
+      params.append("latitude", opts.center.lat);
+      params.append("longitude", opts.center.lng);
+      params.append("distance", Math.min(opts.radius, 500)); // limit to 500km
       console.log(
-        "Re-querying API with bounds:",
-        `${sw.lat},${sw.lng},${ne.lat},${ne.lng}`,
+        `📡 Query with center (${opts.center.lat},${opts.center.lng}) and distance ${opts.radius.toFixed(2)} km`,
       );
     } else {
       params.append("latitude", 53.9333);
       params.append("longitude", -116.5765);
       params.append("distance", 1000);
-      console.log("Initial fetch using center point");
+      console.log("📡 Initial fetch using center point");
     }
 
     const res = await fetch(`${API_URL}?${params.toString()}`);
     const data = await res.json();
-    console.log("Fetched", data.length, "stations");
+    console.log("✅ Fetched", data.length, "stations");
     setStations(data);
   };
 
@@ -157,15 +153,12 @@ export default function ChargingStationsMap() {
     );
 
     if (filteredGroup.length > 0) {
-      if (duplicateMode === "include") {
-        filteredStations.push(...filteredGroup);
-      } else {
-        filteredStations.push(pickDuplicate(filteredGroup, duplicateMode));
-      }
+      if (duplicateMode === "include") filteredStations.push(...filteredGroup);
+      else filteredStations.push(pickDuplicate(filteredGroup, duplicateMode));
     }
   });
 
-  // Handle right-click JSON popup
+  // Right-click JSON popup
   const handleRightClick = async (station) => {
     try {
       const url = `${API_URL}?key=${API_KEY}&chargepointid=${station.ID}`;
@@ -216,24 +209,48 @@ export default function ChargingStationsMap() {
         zoom={5}
         style={{ width: "100%", height: "90%" }}
       >
+        {/* ✅ MoveEnd Listener for React-Leaflet v5 */}
         <MapEvents
-          onMoveEnd={() => {
-            const bounds = mapRef.current.getBounds();
-            console.log("📌 moveend fired", bounds.toBBoxString());
+          onMoveEnd={(map) => {
+            const bounds = map.getBounds();
+            const center = bounds.getCenter();
+
+            // Calculate approximate radius using SW corner
+            const sw = bounds.getSouthWest();
+            const radius = (() => {
+              const R = 6371000;
+              const toRad = (deg) => (deg * Math.PI) / 180;
+              const dLat = toRad(center.lat - sw.lat);
+              const dLon = toRad(center.lng - sw.lng);
+              const a =
+                Math.sin(dLat / 2) ** 2 +
+                Math.cos(toRad(center.lat)) *
+                  Math.cos(toRad(sw.lat)) *
+                  Math.sin(dLon / 2) ** 2;
+              return (2 * R * Math.asin(Math.sqrt(a))) / 1000; // in km
+            })();
+
+            console.log(
+              "📌 moveend fired – center:",
+              center,
+              "radius:",
+              radius.toFixed(2),
+              "km",
+            );
+
             if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
             fetchTimeout.current = setTimeout(() => {
-              console.log(
-                "📡 Map moved – fetching with bounds:",
-                bounds.toBBoxString(),
-              );
-              fetchStations(bounds);
+              console.log("📡 Fetching stations for center + radius");
+              fetchStations({ center, radius });
             }, 500);
           }}
         />
+
         <TileLayer
           attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+
         {filteredStations.map((station) => (
           <Marker
             key={station.ID}
@@ -241,9 +258,7 @@ export default function ChargingStationsMap() {
               station.AddressInfo.Latitude,
               station.AddressInfo.Longitude,
             ]}
-            eventHandlers={{
-              contextmenu: () => handleRightClick(station),
-            }}
+            eventHandlers={{ contextmenu: () => handleRightClick(station) }}
           >
             <Popup>
               <strong>{station.AddressInfo.Title}</strong>
